@@ -3,4 +3,3 @@ services:
     name: syntalytix-php
     runtime: docker
     buildCommand: ""
-    startCommand: "php -S 0.0.0.0:$PORT -t /var/www/html"
