@@ -1,12 +1,24 @@
 <?php
 // config/database.php
-// Database configuration
+// Database configuration - supports local XAMPP and Railway.app
 
-define('DB_HOST', 'localhost');
-define('DB_PORT', 3309);
-define('DB_USER', 'root');
-define('DB_PASS', '');
-define('DB_NAME', 'lms_db');
+// Railway provides MySQL via environment variables
+// MYSQLHOST, MYSQLUSER, MYSQLPASSWORD, MYSQLDATABASE, MYSQLPORT
+if (getenv('MYSQLHOST')) {
+    // Railway.app environment
+    define('DB_HOST', getenv('MYSQLHOST'));
+    define('DB_PORT', getenv('MYSQLPORT') ?: 3306);
+    define('DB_USER', getenv('MYSQLUSER'));
+    define('DB_PASS', getenv('MYSQLPASSWORD'));
+    define('DB_NAME', getenv('MYSQLDATABASE'));
+} else {
+    // Local XAMPP environment
+    define('DB_HOST', 'localhost');
+    define('DB_PORT', 3309);
+    define('DB_USER', 'root');
+    define('DB_PASS', '');
+    define('DB_NAME', 'lms_db');
+}
 
 // Create database connection
 function getDBConnection() {
