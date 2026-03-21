@@ -1,7 +1,8 @@
 FROM php:8.1-apache
 
-# Fix MPM conflict - disable event MPM and enable prefork MPM
-RUN a2dismod mpm_event && a2enmod mpm_prefork
+# Fix MPM conflict - disable conflicting MPMs
+RUN a2dismod mpm_event mpm_worker 2>/dev/null || true && \
+    a2enmod mpm_prefork 2>/dev/null || true
 
 # Enable mod_rewrite
 RUN a2enmod rewrite
@@ -18,4 +19,8 @@ COPY . /var/www/html/
 # Set permissions
 RUN chown -R www-data:www-data /var/www/html
 
-EXPOSE 80
+# Add ServerName to suppress warnings
+RUN echo "ServerName localhost" >> /etc/apache2/apache2.conf
+
+# Use apache2-foreground as the command
+CMD ["apache2-foreground"]
