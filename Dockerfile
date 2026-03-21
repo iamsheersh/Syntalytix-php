@@ -16,4 +16,4 @@ RUN chown -R www-data:www-data /var/www/html
 WORKDIR /var/www/html
 
 # Use start script
-ENTRYPOINT ["/start.sh"]
+CMD ["/start.sh"]
