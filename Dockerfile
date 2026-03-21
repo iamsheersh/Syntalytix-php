@@ -1,17 +1,11 @@
-FROM php:8.1-apache
+FROM php:8.1-fpm-alpine
 
-# Fix MPM conflict - disable conflicting MPMs
-RUN a2dismod mpm_event mpm_worker 2>/dev/null || true && \
-    a2enmod mpm_prefork 2>/dev/null || true
+# Install nginx and mysql extensions
+RUN apk add --no-cache nginx mysql-client \
+    && docker-php-ext-install mysqli pdo pdo_mysql
 
-# Enable mod_rewrite
-RUN a2enmod rewrite
-
-# Install MySQL extensions
-RUN docker-php-ext-install mysqli pdo pdo_mysql
-
-# Set document root
-ENV APACHE_DOCUMENT_ROOT /var/www/html
+# Copy nginx config
+COPY nginx.conf /etc/nginx/nginx.conf
 
 # Copy project files
 COPY . /var/www/html/
@@ -19,8 +13,8 @@ COPY . /var/www/html/
 # Set permissions
 RUN chown -R www-data:www-data /var/www/html
 
-# Add ServerName to suppress warnings
-RUN echo "ServerName localhost" >> /etc/apache2/apache2.conf
+# Expose port
+EXPOSE 80
 
-# Use apache2-foreground as the command
-CMD ["apache2-foreground"]
+# Start nginx and php-fpm
+CMD sh -c "php-fpm -D && nginx -g 'daemon off;'"
