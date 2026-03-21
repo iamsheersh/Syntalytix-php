@@ -1,5 +1,6 @@
 services:
   - type: web
-    name: lms-php
+    name: syntalytix-php
     runtime: docker
-    healthcheckPath: /pages/login.php
+    buildCommand: ""
+    startCommand: "php -S 0.0.0.0:$PORT -t /var/www/html"

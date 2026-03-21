@@ -10,6 +10,3 @@ COPY . /var/www/html/
 RUN chown -R www-data:www-data /var/www/html
 
 WORKDIR /var/www/html
-
-# Use PHP built-in server (simpler, works reliably)
-CMD php -S 0.0.0.0:$PORT -t .
