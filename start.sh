@@ -1,8 +1,10 @@
 #!/bin/sh
 
-# Replace $PORT in nginx config with actual port from environment
-export PORT=${PORT:-80}
-envsubst '$PORT' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
+# Get PORT from environment, default to 80
+PORT=${PORT:-80}
+
+# Generate nginx config with actual port
+sed "s/\$PORT/$PORT/g" /var/www/html/nginx.conf > /etc/nginx/nginx.conf
 
 # Start PHP-FPM
 php-fpm -D
