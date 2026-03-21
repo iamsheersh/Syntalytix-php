@@ -4,8 +4,12 @@ FROM php:8.1-fpm-alpine
 RUN apk add --no-cache nginx mysql-client \
     && docker-php-ext-install mysqli pdo pdo_mysql
 
-# Copy nginx config
-COPY nginx.conf /etc/nginx/nginx.conf
+# Copy nginx config template
+COPY nginx.conf /etc/nginx/nginx.conf.template
+
+# Copy startup script
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
 
 # Copy project files
 COPY . /var/www/html/
@@ -13,8 +17,8 @@ COPY . /var/www/html/
 # Set permissions
 RUN chown -R www-data:www-data /var/www/html
 
-# Expose port
+# Railway provides PORT env var, default to 80
 EXPOSE 80
 
-# Start nginx and php-fpm
-CMD sh -c "php-fpm -D && nginx -g 'daemon off;'"
+# Start using the script
+CMD ["/start.sh"]
