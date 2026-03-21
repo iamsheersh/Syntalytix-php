@@ -1,12 +1,7 @@
-FROM php:8.1-fpm-alpine
+FROM php:8.1-cli
 
-# Install nginx, mysql extensions, and gettext for envsubst
-RUN apk add --no-cache nginx mysql-client gettext \
-    && docker-php-ext-install mysqli pdo pdo_mysql
-
-# Copy startup script
-COPY start.sh /start.sh
-RUN chmod +x /start.sh
+# Install mysql extensions
+RUN docker-php-ext-install mysqli pdo pdo_mysql
 
 # Copy project files
 COPY . /var/www/html/
@@ -14,8 +9,7 @@ COPY . /var/www/html/
 # Set permissions
 RUN chown -R www-data:www-data /var/www/html
 
-# Expose port
-EXPOSE 80
+WORKDIR /var/www/html
 
-# Start using the script
-CMD ["/start.sh"]
+# Use PHP built-in server (simpler, works reliably)
+CMD php -S 0.0.0.0:$PORT -t .
