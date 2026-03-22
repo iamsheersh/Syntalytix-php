@@ -48,6 +48,18 @@ switch ($action) {
     case 'delete_test':
         deleteTest($conn);
         break;
+    case 'get_questions':
+        getQuestions($conn);
+        break;
+    case 'update_question':
+        updateQuestion($conn);
+        break;
+    case 'add_question':
+        addQuestion($conn);
+        break;
+    case 'delete_question':
+        deleteQuestion($conn);
+        break;
     case 'get_settings':
         getSettings($conn);
         break;
@@ -385,5 +397,67 @@ function getAnalytics($conn) {
     }
     
     echo json_encode(['success' => true, 'labels' => $labels, 'values' => $values, 'label' => $label]);
+}
+
+function getQuestions($conn) {
+    $testId = $_GET['test_id'] ?? 0;
+    $stmt = $conn->prepare("SELECT * FROM questions WHERE test_id = ? ORDER BY id");
+    $stmt->bind_param("i", $testId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $questions = [];
+    while ($row = $result->fetch_assoc()) {
+        $row['options'] = json_decode($row['options'], true);
+        $row['correct_answers'] = json_decode($row['correct_answers'], true);
+        $questions[] = $row;
+    }
+    $stmt->close();
+    echo json_encode(['success' => true, 'questions' => $questions]);
+}
+
+function addQuestion($conn) {
+    $testId = $_POST['test_id'] ?? 0;
+    $questionText = $_POST['question_text'] ?? '';
+    $questionType = $_POST['question_type'] ?? 'single_choice';
+    $options = $_POST['options'] ?? '[]';
+    $correctAnswer = $_POST['correct_answer'] ?? null;
+    $correctAnswers = $_POST['correct_answers'] ?? '[]';
+    $marks = $_POST['marks'] ?? 1;
+    
+    $stmt = $conn->prepare("INSERT INTO questions (test_id, question_text, question_type, options, correct_answer, correct_answers, marks) VALUES (?, ?, ?, ?, ?, ?, ?)");
+    $stmt->bind_param("isssssi", $testId, $questionText, $questionType, $options, $correctAnswer, $correctAnswers, $marks);
+    $success = $stmt->execute();
+    $questionId = $stmt->insert_id;
+    $stmt->close();
+    
+    echo json_encode(['success' => $success, 'question_id' => $questionId]);
+}
+
+function updateQuestion($conn) {
+    $id = $_POST['id'] ?? 0;
+    $questionText = $_POST['question_text'] ?? '';
+    $questionType = $_POST['question_type'] ?? 'single_choice';
+    $options = $_POST['options'] ?? '[]';
+    $correctAnswer = $_POST['correct_answer'] ?? null;
+    $correctAnswers = $_POST['correct_answers'] ?? '[]';
+    $marks = $_POST['marks'] ?? 1;
+    
+    $stmt = $conn->prepare("UPDATE questions SET question_text = ?, question_type = ?, options = ?, correct_answer = ?, correct_answers = ?, marks = ? WHERE id = ?");
+    $stmt->bind_param("ssssiii", $questionText, $questionType, $options, $correctAnswer, $correctAnswers, $marks, $id);
+    $success = $stmt->execute();
+    $stmt->close();
+    
+    echo json_encode(['success' => $success]);
+}
+
+function deleteQuestion($conn) {
+    $id = $_POST['id'] ?? 0;
+    
+    $stmt = $conn->prepare("DELETE FROM questions WHERE id = ?");
+    $stmt->bind_param("i", $id);
+    $success = $stmt->execute();
+    $stmt->close();
+    
+    echo json_encode(['success' => $success]);
 }
 ?>

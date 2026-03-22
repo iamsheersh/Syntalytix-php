@@ -1,5 +1,0 @@
-services:
-  - type: web
-    name: syntalytix-php
-    runtime: docker
-    buildCommand: ""

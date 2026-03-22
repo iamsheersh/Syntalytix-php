@@ -1,11 +1,72 @@
 <?php
-// pages/login.php
-require_once __DIR__ . '/../includes/session.php';
+// pages/reset_password.php
+require_once __DIR__ . '/../config/database.php';
 
-if (isLoggedIn()) {
-    $role = $_SESSION['role'] ?? 'Student';
-    header('Location: /lms-php/pages/' . strtolower($role) . '_dashboard.php');
-    exit();
+$message = '';
+$error = '';
+$valid_token = false;
+$user_id = null;
+
+// Check if token is provided in URL
+$token = $_GET['token'] ?? '';
+
+if (empty($token)) {
+    $error = 'Invalid or missing reset token.';
+} else {
+    // Verify token exists and is not expired
+    $stmt = $conn->prepare("SELECT id, email, role_id FROM users WHERE reset_token = ? AND reset_token_expires > NOW() AND status = 'Active'");
+    $stmt->bind_param("s", $token);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $user = $result->fetch_assoc();
+    $stmt->close();
+    
+    if ($user) {
+        // Check if user is admin - don't allow reset
+        $stmt = $conn->prepare("SELECT role_name FROM roles WHERE id = ?");
+        $stmt->bind_param("i", $user['role_id']);
+        $stmt->execute();
+        $role_result = $stmt->get_result();
+        $role = $role_result->fetch_assoc();
+        $stmt->close();
+        
+        if ($role && $role['role_name'] === 'Admin') {
+            $error = 'Password reset is not available for admin accounts.';
+        } else {
+            $valid_token = true;
+            $user_id = $user['id'];
+        }
+    } else {
+        $error = 'Invalid or expired reset token. Please request a new password reset.';
+    }
+}
+
+// Handle password reset form submission
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $valid_token) {
+    $password = $_POST['password'] ?? '';
+    $confirm_password = $_POST['confirm_password'] ?? '';
+    
+    if (empty($password) || empty($confirm_password)) {
+        $error = 'Please enter and confirm your new password.';
+    } elseif (strlen($password) < 6) {
+        $error = 'Password must be at least 6 characters long.';
+    } elseif ($password !== $confirm_password) {
+        $error = 'Passwords do not match.';
+    } else {
+        // Hash and update password
+        $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+        
+        $stmt = $conn->prepare("UPDATE users SET password = ?, reset_token = NULL, reset_token_expires = NULL WHERE id = ?");
+        $stmt->bind_param("si", $hashed_password, $user_id);
+        
+        if ($stmt->execute()) {
+            $message = 'Your password has been reset successfully. You can now login with your new password.';
+            $valid_token = false; // Hide form after success
+        } else {
+            $error = 'Failed to reset password. Please try again.';
+        }
+        $stmt->close();
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -13,7 +74,7 @@ if (isLoggedIn()) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Syntalytix</title>
+    <title>Reset Password - Syntalytix</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -44,7 +105,7 @@ if (isLoggedIn()) {
             color: #fbbf24;
         }
         
-        .login-card {
+        .card {
             width: 100%;
             max-width: 400px;
             padding: 2.5rem;
@@ -53,7 +114,7 @@ if (isLoggedIn()) {
             box-shadow: 0 10px 40px rgba(0,0,0,0.1);
             transition: all 0.5s;
         }
-        body.dark .login-card {
+        body.dark .card {
             background: #0f172a;
             box-shadow: 0 10px 40px rgba(0,0,0,0.3);
         }
@@ -75,7 +136,6 @@ if (isLoggedIn()) {
         
         .form-group { margin-bottom: 1rem; }
         
-        input[type="email"],
         input[type="password"] {
             width: 100%;
             padding: 1rem 1.25rem;
@@ -86,7 +146,6 @@ if (isLoggedIn()) {
             transition: all 0.3s;
             background: #f8fafc;
         }
-        body.dark input[type="email"],
         body.dark input[type="password"] {
             background: #1e293b;
             border-color: #334155;
@@ -95,18 +154,6 @@ if (isLoggedIn()) {
         input:focus {
             border-color: #2563eb;
             box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
-        }
-        
-        .password-wrapper { position: relative; }
-        .toggle-password {
-            position: absolute;
-            right: 1rem;
-            top: 50%;
-            transform: translateY(-50%);
-            background: none;
-            border: none;
-            cursor: pointer;
-            color: #94a3b8;
         }
         
         button[type="submit"] {
@@ -123,9 +170,17 @@ if (isLoggedIn()) {
             margin-top: 1rem;
         }
         button[type="submit"]:hover { background: #1d4ed8; }
-        button[type="submit"]:disabled {
-            opacity: 0.7;
-            cursor: not-allowed;
+        
+        .message {
+            padding: 1rem;
+            background: #f0fdf4;
+            border: 1px solid #86efac;
+            color: #16a34a;
+            border-radius: 1rem;
+            font-size: 0.875rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            text-align: center;
         }
         
         .error-message {
@@ -137,9 +192,8 @@ if (isLoggedIn()) {
             font-size: 0.875rem;
             font-weight: 600;
             margin-bottom: 1rem;
-            display: none;
+            text-align: center;
         }
-        .error-message.show { display: block; }
         
         .links {
             text-align: center;
@@ -153,53 +207,37 @@ if (isLoggedIn()) {
         }
         .links a:hover { color: #1e293b; }
         body.dark .links a:hover { color: white; }
-        
-        .links .forgot-link {
-            display: block;
-            margin-top: 0.5rem;
-            font-size: 0.8rem;
-        }
-        
-        .loading {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 2px solid #ffffff;
-            border-radius: 50%;
-            border-top-color: transparent;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
     <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
     
-    <div class="login-card">
-        <div class="logo-container" style="text-align: center; margin-bottom: 1.5rem;">
-            <img src="../assets/logo.png" alt="Syntalytix Logo" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
-        </div>
-        <h1>Welcome Back</h1>
-        <p class="subtitle">Sign in to your Syntalytix account</p>
+    <div class="card">
+        <h1>Reset Password</h1>
+        <p class="subtitle"><?php echo $valid_token ? 'Enter your new password' : 'Password Reset'; ?></p>
         
-        <div class="error-message" id="error"></div>
+        <?php if ($message): ?>
+            <div class="message"><?php echo htmlspecialchars($message); ?></div>
+        <?php endif; ?>
         
-        <form id="loginForm">
+        <?php if ($error): ?>
+            <div class="error-message"><?php echo htmlspecialchars($error); ?></div>
+        <?php endif; ?>
+        
+        <?php if ($valid_token): ?>
+        <form method="POST" action="">
             <div class="form-group">
-                <input type="email" id="email" placeholder="Email Address" required>
+                <input type="password" name="password" placeholder="New Password" required>
             </div>
             <div class="form-group">
-                <div class="password-wrapper">
-                    <input type="password" id="password" placeholder="Password" required>
-                    <button type="button" class="toggle-password" onclick="togglePassword()">👁️</button>
-                </div>
+                <input type="password" name="confirm_password" placeholder="Confirm New Password" required>
             </div>
-            <button type="submit" id="submitBtn">Sign In</button>
+            <button type="submit">Reset Password</button>
         </form>
+        <?php endif; ?>
         
         <div class="links">
-            <a href="signup.php">Don't have an account? Sign Up</a>
-            <a href="forgot_password.php" class="forgot-link">Forgot Password?</a>
+            <a href="login.php">← Back to Login</a>
         </div>
     </div>
     
@@ -215,46 +253,6 @@ if (isLoggedIn()) {
             localStorage.setItem('theme', isDark ? 'dark' : 'light');
             document.querySelector('.theme-toggle').textContent = isDark ? '☀️' : '🌙';
         }
-        
-        function togglePassword() {
-            const input = document.getElementById('password');
-            input.type = input.type === 'password' ? 'text' : 'password';
-        }
-        
-        document.getElementById('loginForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
-            const errorDiv = document.getElementById('error');
-            const submitBtn = document.getElementById('submitBtn');
-            
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<span class="loading"></span>';
-            errorDiv.classList.remove('show');
-            
-            try {
-                const response = await fetch('../api/auth.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: `action=login&email=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}`
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    window.location.href = '/lms-php/pages/' + data.user.role.toLowerCase() + '_dashboard.php';
-                } else {
-                    errorDiv.textContent = data.error || 'Login failed';
-                    errorDiv.classList.add('show');
-                }
-            } catch (err) {
-                errorDiv.textContent = 'Network error. Please try again.';
-                errorDiv.classList.add('show');
-            } finally {
-                submitBtn.disabled = false;
-                submitBtn.textContent = 'Sign In';
-            }
-        });
     </script>
 </body>
 </html>

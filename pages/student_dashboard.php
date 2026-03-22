@@ -810,17 +810,24 @@ $user = getCurrentUser();
             
             document.getElementById('test-title').textContent = currentTest.test_name;
             
+            // Helper function to escape HTML
+            const escapeHtml = (text) => {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            };
+            
             const container = document.getElementById('test-questions');
             container.innerHTML = currentTest.questions.map((q, idx) => `
                 <div class="question-box">
-                    <h4>Question ${idx + 1}: ${q.question_text}</h4>
+                    <h4>Question ${idx + 1}: ${escapeHtml(q.question_text)}</h4>
                     ${q.options.map((opt, oIdx) => `
                         <label class="option-label">
                             <input type="${q.question_type === 'checkbox' ? 'checkbox' : 'radio'}" 
                                    name="q${q.id}" 
                                    value="${oIdx}"
                                    onchange="updateAnswer(${q.id}, ${oIdx}, '${q.question_type}')">
-                            <span>${opt}</span>
+                            <span>${escapeHtml(opt)}</span>
                         </label>
                     `).join('')}
                 </div>
@@ -859,6 +866,40 @@ $user = getCurrentUser();
         
         function showResult(data) {
             document.getElementById('result-score').textContent = `${data.score}/${data.total_marks}`;
+            
+            // Build detailed answer review
+            const escapeHtml = (text) => {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            };
+            
+            let detailsHtml = '';
+            if (data.questions && data.answers) {
+                detailsHtml = data.questions.map((q, idx) => {
+                    const answerInfo = data.answers[q.id];
+                    const isCorrect = answerInfo.is_correct;
+                    const userAnswer = answerInfo.user_answer;
+                    const correctAnswer = q.correct_answer;
+                    const options = q.options;
+                    
+                    return `
+                        <div class="result-item ${isCorrect ? 'correct' : 'incorrect'}">
+                            <div style="font-weight: 700; margin-bottom: 0.5rem;">
+                                ${isCorrect ? '✅' : '❌'} Question ${idx + 1}: ${escapeHtml(q.question_text)}
+                            </div>
+                            <div style="font-size: 0.875rem; margin-left: 1.5rem;">
+                                <div style="color: ${isCorrect ? '#15803d' : '#dc2626'};">
+                                    Your answer: ${userAnswer !== null && userAnswer !== undefined ? escapeHtml(options[userAnswer] || 'Not answered') : 'Not answered'}
+                                </div>
+                                ${!isCorrect ? `<div style="color: #15803d; margin-top: 0.25rem;">Correct answer: ${escapeHtml(options[correctAnswer])}</div>` : ''}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+            
+            document.getElementById('result-details').innerHTML = detailsHtml;
             document.getElementById('result-modal').classList.add('show');
         }
         

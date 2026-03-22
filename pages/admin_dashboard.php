@@ -4,6 +4,11 @@ require_once __DIR__ . '/../includes/session.php';
 requireRole('Admin');
 
 $user = getCurrentUser();
+
+if (!$user) {
+    header('Location: login.php');
+    exit();
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -650,6 +655,7 @@ $user = getCurrentUser();
         body.dark .chart-loading {
             background: rgba(15,23,42,0.9);
         }
+        </style>
 </head>
 <body>
     <aside class="sidebar">
@@ -877,6 +883,53 @@ $user = getCurrentUser();
         </div>
     </div>
     
+    <!-- Questions Modal -->
+    <div class="modal-overlay" id="questions-modal" style="align-items: flex-start; padding-top: 2rem;">
+        <div class="modal" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
+            <h3>Manage Questions</h3>
+            <div id="questions-list" style="margin-bottom: 1rem;"></div>
+            <button class="btn btn-primary" onclick="addNewQuestion()" style="margin-bottom: 1rem;">+ Add Question</button>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeModal('questions-modal')">Close</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Edit Question Modal -->
+    <div class="modal-overlay" id="question-edit-modal">
+        <div class="modal" style="max-width: 600px;">
+            <h3>Edit Question</h3>
+            <div class="form-group">
+                <label>Question Text</label>
+                <textarea id="edit-question-text" rows="3" style="width: 100%; padding: 1rem; border-radius: 1rem; border: 1px solid #e2e8f0; background: #f8fafc; resize: vertical;"></textarea>
+            </div>
+            <div class="form-group">
+                <label>Question Type</label>
+                <select id="edit-question-type" style="width: 100%; padding: 1rem; border-radius: 1rem; border: 1px solid #e2e8f0; background: #f8fafc;">
+                    <option value="single_choice">Single Choice</option>
+                    <option value="multiple_choice">Multiple Choice</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Options (one per line)</label>
+                <textarea id="edit-question-options" rows="4" style="width: 100%; padding: 1rem; border-radius: 1rem; border: 1px solid #e2e8f0; background: #f8fafc; resize: vertical;" placeholder="Option A&#10;Option B&#10;Option C&#10;Option D"></textarea>
+            </div>
+            <div class="form-group">
+                <label>Correct Answer (0-based index, e.g., 0 for first option)</label>
+                <input type="number" id="edit-question-correct" min="0" style="width: 100%; padding: 1rem; border-radius: 1rem; border: 1px solid #e2e8f0; background: #f8fafc;">
+            </div>
+            <div class="form-group">
+                <label>Marks</label>
+                <input type="number" id="edit-question-marks" min="1" value="1" style="width: 100%; padding: 1rem; border-radius: 1rem; border: 1px solid #e2e8f0; background: #f8fafc;">
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-primary" onclick="saveQuestion()">Save Question</button>
+                <button class="btn btn-danger" onclick="deleteQuestion()">Delete</button>
+                <button class="btn btn-secondary" onclick="closeModal('question-edit-modal')">Cancel</button>
+            </div>
+        </div>
+    </div>
+    
     <!-- Profile Modal -->
     <div class="modal-overlay" id="profile-modal">
         <div class="profile-modal">
@@ -919,6 +972,10 @@ $user = getCurrentUser();
         let editingContentId = null;
         let editingTestId = null;
         let registrationEnabled = true;
+        
+        let editingQuestionId = null;
+        let currentTestIdForQuestions = null;
+        let questions = [];
         
         // Theme
         if (localStorage.getItem('theme') === 'dark') {
@@ -1031,6 +1088,7 @@ $user = getCurrentUser();
                         </div>
                         <div class="content-actions">
                             <button class="btn btn-secondary" onclick="editTest(${t.id})">Edit</button>
+                            <button class="btn btn-primary" onclick="manageQuestions(${t.id})">Questions</button>
                             <button class="btn btn-danger" onclick="deleteTest(${t.id})">Delete</button>
                         </div>
                     </div>
@@ -1153,6 +1211,107 @@ $user = getCurrentUser();
                 body: `action=delete_test&id=${id}`
             });
             loadTests();
+        }
+        
+        // Question management functions
+        async function manageQuestions(testId) {
+            currentTestIdForQuestions = testId;
+            await loadQuestions();
+            document.getElementById('questions-modal').classList.add('show');
+        }
+        
+        async function loadQuestions() {
+            const response = await fetch(`../api/admin.php?action=get_questions&test_id=${currentTestIdForQuestions}`);
+            const data = await response.json();
+            if (data.success) {
+                questions = data.questions;
+                const list = document.getElementById('questions-list');
+                if (questions.length === 0) {
+                    list.innerHTML = '<p style="text-align: center; color: #64748b; padding: 2rem;">No questions yet. Click "Add Question" to create one.</p>';
+                } else {
+                    list.innerHTML = questions.map((q, idx) => `
+                        <div class="content-item" style="cursor: pointer;" onclick="editQuestion(${q.id})">
+                            <div class="content-info">
+                                <h4>Q${idx + 1}: ${q.question_text.substring(0, 60)}${q.question_text.length > 60 ? '...' : ''}</h4>
+                                <div class="content-meta">
+                                    <span class="badge" style="background: #dbeafe; color: #1d4ed8;">${q.question_type === 'single_choice' ? 'Single Choice' : 'Multiple'}</span>
+                                    <span>${q.options ? q.options.length : 0} options</span>
+                                    <span>${q.marks} mark${q.marks > 1 ? 's' : ''}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+            }
+        }
+        
+        function editQuestion(id) {
+            const q = questions.find(q => q.id === id);
+            if (!q) return;
+            editingQuestionId = id;
+            document.getElementById('edit-question-text').value = q.question_text;
+            document.getElementById('edit-question-type').value = q.question_type;
+            document.getElementById('edit-question-options').value = q.options ? q.options.join('\n') : '';
+            document.getElementById('edit-question-correct').value = q.correct_answer || 0;
+            document.getElementById('edit-question-marks').value = q.marks || 1;
+            document.getElementById('question-edit-modal').classList.add('show');
+        }
+        
+        function addNewQuestion() {
+            editingQuestionId = null;
+            document.getElementById('edit-question-text').value = '';
+            document.getElementById('edit-question-type').value = 'single_choice';
+            document.getElementById('edit-question-options').value = '';
+            document.getElementById('edit-question-correct').value = 0;
+            document.getElementById('edit-question-marks').value = 1;
+            document.getElementById('question-edit-modal').classList.add('show');
+        }
+        
+        async function saveQuestion() {
+            const text = document.getElementById('edit-question-text').value;
+            const type = document.getElementById('edit-question-type').value;
+            const optionsText = document.getElementById('edit-question-options').value;
+            const correct = document.getElementById('edit-question-correct').value;
+            const marks = document.getElementById('edit-question-marks').value;
+            
+            const options = optionsText.split('\n').filter(o => o.trim() !== '');
+            const optionsJson = JSON.stringify(options);
+            
+            const action = editingQuestionId ? 'update_question' : 'add_question';
+            const idParam = editingQuestionId ? `&id=${editingQuestionId}` : '';
+            const testIdParam = editingQuestionId ? '' : `&test_id=${currentTestIdForQuestions}`;
+            
+            const response = await fetch('../api/admin.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `action=${action}${idParam}${testIdParam}&question_text=${encodeURIComponent(text)}&question_type=${type}&options=${encodeURIComponent(optionsJson)}&correct_answer=${correct}&marks=${marks}`
+            });
+            
+            const data = await response.json();
+            if (data.success) {
+                closeModal('question-edit-modal');
+                loadQuestions();
+                loadTests();
+            } else {
+                alert('Failed to save question');
+            }
+        }
+        
+        async function deleteQuestion() {
+            if (!editingQuestionId || !confirm('Delete this question?')) return;
+            
+            const response = await fetch('../api/admin.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `action=delete_question&id=${editingQuestionId}`
+            });
+            
+            const data = await response.json();
+            if (data.success) {
+                closeModal('question-edit-modal');
+                loadQuestions();
+                loadTests();
+            }
         }
         
         function closeModal(id) {

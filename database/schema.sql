@@ -25,6 +25,8 @@ CREATE TABLE users (
     password VARCHAR(255) NOT NULL,
     role_id INT DEFAULT 3,
     status ENUM('Active', 'Disabled') DEFAULT 'Active',
+    reset_token VARCHAR(255) NULL,
+    reset_token_expires TIMESTAMP NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (role_id) REFERENCES roles(id)
 );

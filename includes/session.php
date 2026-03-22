@@ -16,6 +16,11 @@ function getCurrentUser() {
     require_once __DIR__ . '/../config/database.php';
     $conn = getDBConnection();
     
+    if (!$conn) {
+        error_log("Database connection failed in getCurrentUser");
+        return null;
+    }
+    
     $stmt = $conn->prepare("SELECT u.*, r.role_name FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = ?");
     $stmt->bind_param("i", $_SESSION['user_id']);
     $stmt->execute();
@@ -41,7 +46,8 @@ function requireRole($role) {
     requireLogin();
     $user = getCurrentUser();
     if (!$user || $user['role_name'] !== $role) {
-        header('Location: /lms-php/pages/' . strtolower($user['role_name']) . '_dashboard.php');
+        $redirectRole = $user ? strtolower($user['role_name']) : 'student';
+        header('Location: /lms-php/pages/' . $redirectRole . '_dashboard.php');
         exit();
     }
 }

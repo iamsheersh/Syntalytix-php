@@ -171,7 +171,9 @@ function submitTest($conn, $userId) {
         'success' => true,
         'score' => $score,
         'total_marks' => $totalMarks,
-        'history_id' => $historyId
+        'history_id' => $historyId,
+        'questions' => $questions,
+        'answers' => $processedAnswers
     ]);
 }
 
