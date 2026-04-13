@@ -301,7 +301,7 @@ Need help? We're here for you!
 | Channel | Link |
 |---------|------|
 | 🐛 Issues | [GitHub Issues](https://github.com/iamsheersh/syntalytix-php/issues) |
-| 📧 Email | support@syntalytix.com |
+| 📧 Email | syntalytix@gmail.com |
 | 💬 Discussions | [GitHub Discussions](https://github.com/iamsheersh/syntalytix-php/discussions) |
 
 ---
