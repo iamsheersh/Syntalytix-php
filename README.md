@@ -302,7 +302,7 @@ Need help? We're here for you!
 |---------|------|
 | 🐛 Issues | [GitHub Issues](https://github.com/iamsheersh/syntalytix-php/issues) |
 | 📧 Email | syntalytix@gmail.com |
-| 💬 Discussions | [GitHub Discussions](https://github.com/iamsheersh/syntalytix-php/discussions) |
+
 
 ---
 
