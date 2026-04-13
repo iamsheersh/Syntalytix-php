@@ -282,7 +282,7 @@ Contributions are welcome! Please follow these steps:
 This project is open source and available under the [MIT License](LICENSE).
 
 ```
-Copyright (c) 2024 Syntalytix
+Copyright (c) 2026 Syntalytix
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -300,9 +300,9 @@ Need help? We're here for you!
 
 | Channel | Link |
 |---------|------|
-| 🐛 Issues | [GitHub Issues](https://github.com/yourusername/syntalytix-lms/issues) |
+| 🐛 Issues | [GitHub Issues](https://github.com/iamsheersh/syntalytix-lms/issues) |
 | 📧 Email | support@syntalytix.com |
-| 💬 Discussions | [GitHub Discussions](https://github.com/yourusername/syntalytix-lms/discussions) |
+| 💬 Discussions | [GitHub Discussions](https://github.com/iamsheersh/syntalytix-lms/discussions) |
 
 ---
 
@@ -310,6 +310,6 @@ Need help? We're here for you!
 
 **⭐ Star this repo if you find it helpful!**
 
-Made with ❤️ by the Syntalytix Team
+Made with ❤️ by Sheersh
 
 </div>
