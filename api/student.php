@@ -137,7 +137,7 @@ function submitTest($conn, $userId) {
         $isCorrect = false;
         
         if ($q['question_type'] === 'checkbox') {
-            $correctAnswers = $row['correct_answers'] ?? [];
+            $correctAnswers = $q['correct_answers'] ?? [];
             if (is_array($userAnswer)) {
                 sort($userAnswer);
                 sort($correctAnswers);

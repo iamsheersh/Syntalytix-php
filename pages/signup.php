@@ -14,6 +14,12 @@ $result = $conn->query("SELECT setting_value FROM settings WHERE setting_key = '
 $setting = $result->fetch_assoc();
 $registrationEnabled = $setting ? $setting['setting_value'] == '1' : true;
 $conn->close();
+
+// Redirect to login if registration is disabled
+if (!$registrationEnabled) {
+    header('Location: login.php?error=registration_disabled');
+    exit();
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -21,6 +27,9 @@ $conn->close();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sign Up - Syntalytix</title>
+    <link rel="icon" type="image/png" href="../assets/logo.png">
+    <link rel="apple-touch-icon" href="../assets/logo.png">
+    <meta name="theme-color" content="#0f172a">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -218,6 +227,8 @@ $conn->close();
         }
         .links a:hover { color: #1e293b; }
         body.dark .links a:hover { color: white; }
+        body.dark .password-requirements { background: #1e293b; border-color: #334155; }
+        body.dark .password-requirements div { color: #94a3b8; }
         
         .loading {
             display: inline-block;
@@ -236,34 +247,58 @@ $conn->close();
     
     <div class="signup-card">
         <div class="logo-container" style="text-align: center; margin-bottom: 1.5rem;">
-            <img src="../assets/logo.png" alt="Syntalytix Logo" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+            <a href="../index.php">
+                <img src="../assets/logo.png" alt="Syntalytix Logo" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+            </a>
         </div>
         <h1>Create Account</h1>
         <p class="subtitle">Join the Syntalytix platform today</p>
         
         <div class="error-message" id="error"></div>
-        <div class="warning-message <?php echo !$registrationEnabled ? 'show' : ''; ?>" id="warning">
-            Student registration is currently disabled by the administrator. Please contact your administrator for assistance.
-        </div>
         
         <form id="signupForm">
             <div class="role-selector">
-                <button type="button" class="role-btn active" data-role="Student" onclick="setRole('Student')" <?php echo !$registrationEnabled ? 'disabled' : ''; ?>>Student</button>
-                <button type="button" class="role-btn" data-role="Teacher" onclick="setRole('Teacher')" <?php echo !$registrationEnabled ? 'disabled' : ''; ?>>Teacher</button>
+                <button type="button" class="role-btn active" data-role="Student" onclick="setRole('Student')">Student</button>
+                <button type="button" class="role-btn" data-role="Teacher" onclick="setRole('Teacher')">Teacher</button>
             </div>
             
             <div class="form-group">
-                <input type="email" id="email" placeholder="Email Address" required <?php echo !$registrationEnabled ? 'disabled' : ''; ?>>
+                <input type="text" id="name" placeholder="Full Name" required>
+            </div>
+            <div class="form-group">
+                <input type="email" id="email" placeholder="Email Address" required>
             </div>
             <div class="form-group">
                 <div class="password-wrapper">
-                    <input type="password" id="password" placeholder="Password (min 6 characters)" required minlength="6" <?php echo !$registrationEnabled ? 'disabled' : ''; ?>>
-                    <button type="button" class="toggle-password" onclick="togglePassword()" <?php echo !$registrationEnabled ? 'disabled' : ''; ?>>👁️</button>
+                    <input type="password" id="password" placeholder="Password (min 10 characters)" required oninput="checkPasswordStrength()">
+                    <button type="button" class="toggle-password" onclick="togglePassword()">👁️</button>
+                </div>
+                <!-- Password Requirements -->
+                <div class="password-requirements" style="margin-top: 0.75rem; padding: 0.75rem; background: #f1f5f9; border-radius: 0.75rem; font-size: 0.8rem; border: 1px solid #e2e8f0;">
+                    <div style="font-weight: 700; margin-bottom: 0.5rem; color: #475569; font-size: 0.85rem;">Password Requirements:</div>
+                    <div class="req-item" id="req-length" style="display: flex; align-items: center; gap: 0.5rem; color: #64748b; margin-bottom: 0.25rem;">
+                        <span class="req-icon">⭕</span>
+                        <span>Minimum 10 characters</span>
+                    </div>
+                    <div class="req-item" id="req-uppercase" style="display: flex; align-items: center; gap: 0.5rem; color: #64748b; margin-bottom: 0.25rem;">
+                        <span class="req-icon">⭕</span>
+                        <span>One uppercase letter (A-Z)</span>
+                    </div>
+                    <div class="req-item" id="req-lowercase" style="display: flex; align-items: center; gap: 0.5rem; color: #64748b; margin-bottom: 0.25rem;">
+                        <span class="req-icon">⭕</span>
+                        <span>One lowercase letter (a-z)</span>
+                    </div>
+                    <div class="req-item" id="req-number" style="display: flex; align-items: center; gap: 0.5rem; color: #64748b; margin-bottom: 0.25rem;">
+                        <span class="req-icon">⭕</span>
+                        <span>One number (0-9)</span>
+                    </div>
+                    <div class="req-item" id="req-special" style="display: flex; align-items: center; gap: 0.5rem; color: #64748b;">
+                        <span class="req-icon">⭕</span>
+                        <span>One special symbol (!@#$%^&*)</span>
+                    </div>
                 </div>
             </div>
-            <button type="submit" id="submitBtn" <?php echo !$registrationEnabled ? 'disabled' : ''; ?>>
-                <?php echo !$registrationEnabled ? 'Registration Disabled' : 'Register as Student'; ?>
-            </button>
+            <button type="submit" id="submitBtn" disabled style="opacity: 0.5;">Register as Student</button>
         </form>
         
         <div class="links">
@@ -273,7 +308,6 @@ $conn->close();
     
     <script>
         let selectedRole = 'Student';
-        const registrationEnabled = <?php echo $registrationEnabled ? 'true' : 'false'; ?>;
         
         // Theme handling
         if (localStorage.getItem('theme') === 'dark') {
@@ -291,9 +325,43 @@ $conn->close();
             const input = document.getElementById('password');
             input.type = input.type === 'password' ? 'text' : 'password';
         }
+
+        function checkPasswordStrength() {
+            const password = document.getElementById('password').value;
+            
+            // Check each requirement
+            const hasLength = password.length >= 10;
+            const hasUppercase = /[A-Z]/.test(password);
+            const hasLowercase = /[a-z]/.test(password);
+            const hasNumber = /[0-9]/.test(password);
+            const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
+            
+            // Update UI for each requirement
+            updateReqItem('req-length', hasLength);
+            updateReqItem('req-uppercase', hasUppercase);
+            updateReqItem('req-lowercase', hasLowercase);
+            updateReqItem('req-number', hasNumber);
+            updateReqItem('req-special', hasSpecial);
+            
+            // Enable/disable submit button based on all requirements
+            const allValid = hasLength && hasUppercase && hasLowercase && hasNumber && hasSpecial;
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = !allValid;
+            submitBtn.style.opacity = allValid ? '1' : '0.5';
+        }
+
+        function updateReqItem(id, isValid) {
+            const item = document.getElementById(id);
+            if (isValid) {
+                item.style.color = '#16a34a'; // Green
+                item.querySelector('.req-icon').textContent = '✅';
+            } else {
+                item.style.color = '#64748b'; // Gray
+                item.querySelector('.req-icon').textContent = '⭕';
+            }
+        }
         
         function setRole(role) {
-            if (!registrationEnabled) return;
             selectedRole = role;
             document.querySelectorAll('.role-btn').forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.role === role);
@@ -303,8 +371,8 @@ $conn->close();
         
         document.getElementById('signupForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            if (!registrationEnabled) return;
             
+            const name = document.getElementById('name').value;
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
             const errorDiv = document.getElementById('error');
@@ -318,13 +386,19 @@ $conn->close();
                 const response = await fetch('../api/auth.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: `action=register&email=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}`
+                    body: `action=register&name=${encodeURIComponent(name)}&email=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}&role=${encodeURIComponent(selectedRole)}`
                 });
                 
                 const data = await response.json();
                 
                 if (data.success) {
-                    window.location.href = 'student_dashboard.php';
+                    if (data.pending) {
+                        // Teacher pending approval - redirect to login with message
+                        window.location.href = 'login.php?info=pending_teacher';
+                    } else {
+                        // Student - go to dashboard
+                        window.location.href = 'student_dashboard.php';
+                    }
                 } else {
                     errorDiv.textContent = data.error || 'Registration failed';
                     errorDiv.classList.add('show');
@@ -333,10 +407,11 @@ $conn->close();
                 errorDiv.textContent = 'Network error. Please try again.';
                 errorDiv.classList.add('show');
             } finally {
-                submitBtn.disabled = !registrationEnabled;
-                submitBtn.textContent = registrationEnabled ? 'Register as ' + selectedRole : 'Registration Disabled';
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Register as ' + selectedRole;
             }
         });
     </script>
+    <?php include __DIR__ . '/../includes/support_popup.php'; ?>
 </body>
 </html>

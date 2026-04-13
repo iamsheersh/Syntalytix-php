@@ -33,11 +33,20 @@ switch ($action) {
     case 'get_stats':
         getStats($conn);
         break;
+    case 'create_user':
+        createUser($conn);
+        break;
     case 'update_user':
         updateUser($conn);
         break;
+    case 'create_content':
+        createContent($conn, $user['id']);
+        break;
     case 'update_content':
         updateContent($conn);
+        break;
+    case 'create_test':
+        createTest($conn, $user['id']);
         break;
     case 'update_test':
         updateTest($conn);
@@ -47,6 +56,9 @@ switch ($action) {
         break;
     case 'delete_test':
         deleteTest($conn);
+        break;
+    case 'get_test_scores':
+        getTestScores($conn);
         break;
     case 'get_questions':
         getQuestions($conn);
@@ -143,14 +155,101 @@ function getStats($conn) {
     echo json_encode(['success' => true, 'stats' => $stats]);
 }
 
+function createContent($conn, $userId) {
+    $title = $_POST['title'] ?? '';
+    $topic = $_POST['topic'] ?? '';
+    $youtubeUrl = $_POST['youtubeUrl'] ?? '';
+    $driveUrl = $_POST['driveUrl'] ?? '';
+    
+    $content_type = (!empty($youtubeUrl)) ? 'video' : 'pdf';
+    
+    $stmt = $conn->prepare("INSERT INTO content (uploader_id, title, topic, content_type, youtube_url, drive_url) VALUES (?, ?, ?, ?, ?, ?)");
+    $stmt->bind_param("isssss", $userId, $title, $topic, $content_type, $youtubeUrl, $driveUrl);
+    $success = $stmt->execute();
+    $id = $stmt->insert_id;
+    $stmt->close();
+    
+    echo json_encode(['success' => $success, 'id' => $id]);
+}
+
+function createTest($conn, $userId) {
+    $test_name = $_POST['test_name'] ?? '';
+    $topic = $_POST['topic'] ?? '';
+    $questions = json_decode($_POST['questions'] ?? '[]', true);
+    
+    $conn->begin_transaction();
+    
+    try {
+        $stmt = $conn->prepare("INSERT INTO tests (creator_id, test_name, topic) VALUES (?, ?, ?)");
+        $stmt->bind_param("iss", $userId, $test_name, $topic);
+        $stmt->execute();
+        $testId = $stmt->insert_id;
+        $stmt->close();
+        
+        // Insert questions
+        $stmt = $conn->prepare("INSERT INTO questions (test_id, question_text, question_type, options, correct_answer, correct_answers, marks) VALUES (?, ?, ?, ?, ?, ?, ?)");
+        foreach ($questions as $q) {
+            $options = json_encode($q['options'] ?? []);
+            $correctAnswers = json_encode($q['correct_answers'] ?? []);
+            $stmt->bind_param("isssssi", $testId, $q['question_text'], $q['question_type'], $options, $q['correct_answer'], $correctAnswers, $q['marks']);
+            $stmt->execute();
+        }
+        $stmt->close();
+        
+        $conn->commit();
+        echo json_encode(['success' => true, 'id' => $testId]);
+    } catch (Exception $e) {
+        $conn->rollback();
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+}
+
+function createUser($conn) {
+    $name = $_POST['name'] ?? '';
+    $email = $_POST['email'] ?? '';
+    $role_id = $_POST['role_id'] ?? 3;
+    $status = $_POST['status'] ?? 'Active';
+    $password = $_POST['password'] ?? '';
+    
+    // Check if email already exists
+    $stmt = $conn->prepare("SELECT id FROM users WHERE email = ?");
+    $stmt->bind_param("s", $email);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    if ($result->num_rows > 0) {
+        $stmt->close();
+        echo json_encode(['success' => false, 'error' => 'Email already exists']);
+        return;
+    }
+    $stmt->close();
+    
+    $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+    $stmt = $conn->prepare("INSERT INTO users (name, email, password, role_id, status) VALUES (?, ?, ?, ?, ?)");
+    $stmt->bind_param("sssis", $name, $email, $hashedPassword, $role_id, $status);
+    $success = $stmt->execute();
+    $id = $stmt->insert_id;
+    $stmt->close();
+    
+    echo json_encode(['success' => $success, 'id' => $id]);
+}
+
 function updateUser($conn) {
     $id = $_POST['id'] ?? 0;
     $name = $_POST['name'] ?? '';
     $role_id = $_POST['role_id'] ?? 3;
     $status = $_POST['status'] ?? 'Active';
+    $password = $_POST['password'] ?? '';
     
-    $stmt = $conn->prepare("UPDATE users SET name = ?, role_id = ?, status = ? WHERE id = ?");
-    $stmt->bind_param("sisi", $name, $role_id, $status, $id);
+    // If password provided, update it too
+    if (!empty($password)) {
+        $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+        $stmt = $conn->prepare("UPDATE users SET name = ?, role_id = ?, status = ?, password = ? WHERE id = ?");
+        $stmt->bind_param("sisssi", $name, $role_id, $status, $hashedPassword, $id);
+    } else {
+        $stmt = $conn->prepare("UPDATE users SET name = ?, role_id = ?, status = ? WHERE id = ?");
+        $stmt->bind_param("sisi", $name, $role_id, $status, $id);
+    }
+    
     $success = $stmt->execute();
     $stmt->close();
     
@@ -179,13 +278,39 @@ function updateTest($conn) {
     $id = $_POST['id'] ?? 0;
     $test_name = $_POST['test_name'] ?? '';
     $topic = $_POST['topic'] ?? '';
+    $questions = json_decode($_POST['questions'] ?? '[]', true);
     
-    $stmt = $conn->prepare("UPDATE tests SET test_name = ?, topic = ? WHERE id = ?");
-    $stmt->bind_param("ssi", $test_name, $topic, $id);
-    $success = $stmt->execute();
-    $stmt->close();
+    $conn->begin_transaction();
     
-    echo json_encode(['success' => $success]);
+    try {
+        // Update test details
+        $stmt = $conn->prepare("UPDATE tests SET test_name = ?, topic = ? WHERE id = ?");
+        $stmt->bind_param("ssi", $test_name, $topic, $id);
+        $stmt->execute();
+        $stmt->close();
+        
+        // Delete existing questions and re-insert
+        $stmt = $conn->prepare("DELETE FROM questions WHERE test_id = ?");
+        $stmt->bind_param("i", $id);
+        $stmt->execute();
+        $stmt->close();
+        
+        // Insert updated questions
+        $stmt = $conn->prepare("INSERT INTO questions (test_id, question_text, question_type, options, correct_answer, correct_answers, marks) VALUES (?, ?, ?, ?, ?, ?, ?)");
+        foreach ($questions as $q) {
+            $options = json_encode($q['options'] ?? []);
+            $correctAnswers = json_encode($q['correct_answers'] ?? []);
+            $stmt->bind_param("isssssi", $id, $q['question_text'], $q['question_type'], $options, $q['correct_answer'], $correctAnswers, $q['marks']);
+            $stmt->execute();
+        }
+        $stmt->close();
+        
+        $conn->commit();
+        echo json_encode(['success' => true]);
+    } catch (Exception $e) {
+        $conn->rollback();
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
 }
 
 function deleteContent($conn) {
@@ -459,5 +584,72 @@ function deleteQuestion($conn) {
     $stmt->close();
     
     echo json_encode(['success' => $success]);
+}
+
+function getTestScores($conn) {
+    $testId = $_GET['test_id'] ?? 0;
+    
+    // Get test info
+    $stmt = $conn->prepare("SELECT test_name, topic FROM tests WHERE id = ?");
+    $stmt->bind_param("i", $testId);
+    $stmt->execute();
+    $testInfo = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    
+    // Get all scores with student info
+    $stmt = $conn->prepare("SELECT th.*, u.name, u.email FROM test_history th JOIN users u ON th.user_id = u.id WHERE th.test_id = ? ORDER BY th.submitted_at DESC");
+    $stmt->bind_param("i", $testId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $scores = [];
+    $totalScore = 0;
+    $count = 0;
+    $maxScore = 0;
+    
+    while ($row = $result->fetch_assoc()) {
+        $scores[] = $row;
+        $totalScore += $row['score'];
+        $maxScore = max($maxScore, $row['score']);
+        $count++;
+    }
+    $stmt->close();
+    
+    // Calculate statistics
+    $avgScore = $count > 0 ? round($totalScore / $count, 2) : 0;
+    $totalMarks = $count > 0 ? $scores[0]['total_marks'] : 0;
+    
+    // Get total questions count
+    $stmt = $conn->prepare("SELECT COUNT(*) as q_count FROM questions WHERE test_id = ?");
+    $stmt->bind_param("i", $testId);
+    $stmt->execute();
+    $qCount = $stmt->get_result()->fetch_assoc()['q_count'];
+    $stmt->close();
+    
+    // Get questions
+    $stmt = $conn->prepare("SELECT * FROM questions WHERE test_id = ? ORDER BY id");
+    $stmt->bind_param("i", $testId);
+    $stmt->execute();
+    $resQ = $stmt->get_result();
+    $questions = [];
+    while ($rowQ = $resQ->fetch_assoc()) {
+        $rowQ['options'] = json_decode($rowQ['options'], true);
+        $rowQ['correct_answers'] = json_decode($rowQ['correct_answers'], true);
+        $questions[] = $rowQ;
+    }
+    $stmt->close();
+    
+    echo json_encode([
+        'success' => true,
+        'test_info' => $testInfo,
+        'scores' => $scores,
+        'stats' => [
+            'total_students' => $count,
+            'avg_score' => $avgScore,
+            'max_score' => $maxScore,
+            'total_marks' => $totalMarks,
+            'total_questions' => $qCount
+        ],
+        'questions' => $questions
+    ]);
 }
 ?>

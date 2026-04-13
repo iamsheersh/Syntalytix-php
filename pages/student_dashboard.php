@@ -11,6 +11,9 @@ $user = getCurrentUser();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Student Dashboard - Syntalytix</title>
+    <link rel="icon" type="image/png" href="../assets/logo.png">
+    <link rel="apple-touch-icon" href="../assets/logo.png">
+    <meta name="theme-color" content="#0f172a">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -525,14 +528,80 @@ $user = getCurrentUser();
             padding: 3rem;
             color: #64748b;
         }
+
+        @media (max-width: 768px) {
+            body {
+                display: block;
+            }
+
+            .sidebar {
+                position: relative;
+                width: 100%;
+                height: auto;
+                padding: 1rem;
+            }
+
+            .sidebar-header {
+                margin-bottom: 1rem;
+                padding-left: 0;
+            }
+
+            .nav-menu {
+                flex-direction: row;
+                flex-wrap: wrap;
+                gap: 0.5rem;
+            }
+
+            .nav-item {
+                flex: 1;
+                min-width: 140px;
+                padding: 0.75rem;
+            }
+
+            .profile-btn,
+            .logout-btn {
+                width: 100%;
+            }
+
+            .main-content {
+                margin-left: 0;
+                padding: 1rem;
+            }
+
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 1rem;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .content-item {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 0.75rem;
+            }
+
+            .content-actions,
+            .profile-actions {
+                flex-direction: column;
+            }
+
+            .content-actions .btn,
+            .profile-actions .btn {
+                width: 100%;
+            }
+        }
     </style>
 </head>
 <body>
     <aside class="sidebar">
         <div class="sidebar-header">
-            <div class="sidebar-logo" style="padding: 0; overflow: hidden;">
+            <a href="../index.php" class="sidebar-logo" style="padding: 0; overflow: hidden; display: block;">
                 <img src="../assets/logo.png" alt="Syntalytix" style="width: 100%; height: 100%; object-fit: cover;">
-            </div>
+            </a>
             <div class="sidebar-title">
                 <h1>Student</h1>
                 <p>Learning Portal</p>
@@ -1023,5 +1092,6 @@ $user = getCurrentUser();
         loadTopics();
         loadMaterials();
     </script>
+    <?php include __DIR__ . '/../includes/support_popup.php'; ?>
 </body>
 </html>

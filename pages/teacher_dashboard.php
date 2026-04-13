@@ -11,6 +11,9 @@ $user = getCurrentUser();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Teacher Dashboard - Syntalytix</title>
+    <link rel="icon" type="image/png" href="../assets/logo.png">
+    <link rel="apple-touch-icon" href="../assets/logo.png">
+    <meta name="theme-color" content="#0f172a">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -446,14 +449,80 @@ $user = getCurrentUser();
             font-size: 3rem;
             margin-bottom: 1rem;
         }
+
+        @media (max-width: 768px) {
+            body {
+                display: block;
+            }
+
+            .sidebar {
+                position: relative;
+                width: 100%;
+                height: auto;
+                padding: 1rem;
+            }
+
+            .sidebar-header {
+                margin-bottom: 1rem;
+                padding-left: 0;
+            }
+
+            .nav-menu {
+                flex-direction: row;
+                flex-wrap: wrap;
+                gap: 0.5rem;
+            }
+
+            .nav-item {
+                flex: 1;
+                min-width: 160px;
+                padding: 0.75rem;
+            }
+
+            .profile-btn,
+            .logout-btn {
+                width: 100%;
+            }
+
+            .main-content {
+                margin-left: 0;
+                padding: 1rem;
+            }
+
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 1rem;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .content-item {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 0.75rem;
+            }
+
+            .content-actions,
+            .modal-actions {
+                flex-direction: column;
+            }
+
+            .content-actions .btn,
+            .modal-actions .btn {
+                width: 100%;
+            }
+        }
     </style>
 </head>
 <body>
     <aside class="sidebar">
         <div class="sidebar-header">
-            <div class="sidebar-logo" style="padding: 0; overflow: hidden;">
+            <a href="../index.php" class="sidebar-logo" style="padding: 0; overflow: hidden; display: block;">
                 <img src="../assets/logo.png" alt="Syntalytix" style="width: 100%; height: 100%; object-fit: cover;">
-            </div>
+            </a>
             <div class="sidebar-title">
                 <h1>Teacher</h1>
                 <p>Content Manager</p>
@@ -587,6 +656,17 @@ $user = getCurrentUser();
         </div>
     </div>
     
+    <!-- View Answers Modal -->
+    <div class="modal-overlay" id="answers-modal">
+        <div class="modal" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
+            <h3 id="answers-modal-title">Student Answers</h3>
+            <div id="answers-container"></div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeModal('answers-modal')">Close</button>
+            </div>
+        </div>
+    </div>
+    
     <!-- Profile Modal -->
     <div class="modal-overlay" id="profile-modal">
         <div class="profile-modal">
@@ -626,6 +706,7 @@ $user = getCurrentUser();
         let editingContentId = null;
         let editingTestId = null;
         let questions = [];
+        let currentTestScoresData = null;
         
         if (localStorage.getItem('theme') === 'dark') {
             document.body.classList.add('dark');
@@ -794,14 +875,36 @@ $user = getCurrentUser();
             document.getElementById('test-modal').classList.add('show');
         }
         
-        function editTest(id) {
+        async function editTest(id) {
             const item = tests.find(t => t.id == id);
             if (!item) return;
             editingTestId = id;
             document.getElementById('test-modal-title').textContent = 'Edit Test';
             document.getElementById('test-name').value = item.test_name;
             document.getElementById('test-topic').value = item.topic || 'General';
-            questions = [];
+
+            // Load existing questions
+            try {
+                const response = await fetch(`../api/teacher.php?action=get_test_questions&test_id=${id}`);
+                const data = await response.json();
+                if (data.success) {
+                    questions = data.questions.map(q => ({
+                        id: q.id,
+                        question_text: q.question_text,
+                        question_type: q.question_type === 'single_choice' ? 'single' : 'checkbox',
+                        options: q.options || [],
+                        correct_answer: q.correct_answer,
+                        correct_answers: q.correct_answers || [],
+                        marks: q.marks || 1
+                    }));
+                } else {
+                    questions = [];
+                }
+            } catch (err) {
+                console.error('Failed to load questions:', err);
+                questions = [];
+            }
+
             renderQuestions();
             document.getElementById('test-modal').classList.add('show');
         }
@@ -875,7 +978,7 @@ $user = getCurrentUser();
                     </div>
                     <div class="form-group">
                         <label>${q.question_type === 'checkbox' ? 'Correct Answers (comma-separated indices)' : 'Correct Answer (index)'}</label>
-                        <input type="text" placeholder="e.g., 0 or 0,1,2" value="${Array.isArray(q.correct_answers) ? q.correct_answers.join(',') : q.correct_answer}" onchange="updateQuestion(${qIdx}, '${q.question_type === 'checkbox' ? 'correct_answers' : 'correct_answer'}', this.value)">
+                        <input type="text" placeholder="e.g., 0 or 0,1,2" value="${q.question_type === 'checkbox' ? (q.correct_answers || []).join(',') : (q.correct_answer || '')}" onchange="updateCorrectAnswer(${qIdx}, this.value)">
                     </div>
                     <div class="form-group">
                         <label>Marks</label>
@@ -895,12 +998,21 @@ $user = getCurrentUser();
             }
             
             // Format questions properly
-            const formattedQuestions = questions.map(q => ({
-                ...q,
-                correct_answers: q.question_type === 'checkbox' 
-                    ? (q.correct_answers || '').toString().split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n))
-                    : []
-            }));
+            const formattedQuestions = questions.map(q => {
+                if (q.question_type === 'checkbox') {
+                    return {
+                        ...q,
+                        correct_answer: '',
+                        correct_answers: (q.correct_answers || []).toString().split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n))
+                    };
+                } else {
+                    return {
+                        ...q,
+                        correct_answer: parseInt(q.correct_answer) || 0,
+                        correct_answers: []
+                    };
+                }
+            });
             
             const action = editingTestId ? 'update_test' : 'create_test';
             const body = `action=${action}&test_name=${encodeURIComponent(testName)}&topic=${encodeURIComponent(topic)}&questions=${encodeURIComponent(JSON.stringify(formattedQuestions))}`;
@@ -951,6 +1063,7 @@ $user = getCurrentUser();
                 const data = await response.json();
                 
                 if (data.success) {
+                    currentTestScoresData = data;
                     // Render stats
                     const stats = data.stats;
                     const percentage = stats.total_marks > 0 ? Math.round((stats.avg_score / stats.total_marks) * 100) : 0;
@@ -997,7 +1110,10 @@ $user = getCurrentUser();
                                     <td style="padding: 1rem; text-align: center;">
                                         <span style="background: ${pct >= 70 ? '#10b981' : pct >= 50 ? '#f59e0b' : '#ef4444'}; color: white; padding: 0.25rem 0.75rem; border-radius: 0.5rem; font-size: 0.75rem; font-weight: 700;">${pct}%</span>
                                     </td>
-                                    <td style="padding: 1rem; text-align: right; color: #64748b; font-size: 0.875rem;">${date}</td>
+                                    <td style="padding: 1rem; text-align: right;">
+                                        <div style="color: #64748b; font-size: 0.875rem; margin-bottom: 0.5rem;">${date}</div>
+                                        <button class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="viewStudentAnswers(${s.id}, '${s.name.replace(/'/g, "\\'")}')">View Answers</button>
+                                    </td>
                                 </tr>
                             `;
                         }).join('');
@@ -1012,6 +1128,71 @@ $user = getCurrentUser();
                     <tr><td colspan="4" style="text-align: center; padding: 2rem; color: #ef4444;">Error loading scores</td></tr>
                 `;
             }
+        }
+        
+        function viewStudentAnswers(historyId, studentName) {
+            if (!currentTestScoresData) return;
+            
+            const historyObj = currentTestScoresData.scores.find(s => s.id == historyId);
+            if (!historyObj) return;
+            
+            document.getElementById('answers-modal-title').textContent = `${studentName}'s Answers`;
+            
+            let html = '';
+            const testQuestions = currentTestScoresData.questions;
+            const answersJson = historyObj.answers;
+            
+            let userAnswers = {};
+            try {
+                userAnswers = typeof answersJson === 'string' ? JSON.parse(answersJson) : answersJson;
+            } catch(e) {}
+
+            const escapeHtml = (unsafe) => {
+                if (unsafe == null) return 'None';
+                return unsafe.toString().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+            };
+
+            testQuestions.forEach((q, idx) => {
+                const ua = userAnswers[q.id] || {};
+                const isCorrect = ua.is_correct;
+                const userChoice = ua.user_answer;
+                
+                let answerDisplay = '';
+                
+                if (q.question_type === 'checkbox') {
+                    let correctChoices = (q.correct_answers || []).map(i => q.options[i]).join(', ');
+                    let userChosen = Array.isArray(userChoice) ? userChoice.map(i => q.options[i]).join(', ') : 'None';
+                    answerDisplay = `
+                        <div style="margin-top: 0.5rem; font-size: 0.875rem;">
+                            <div style="color: #64748b; margin-bottom: 0.25rem;">Selected: <span style="font-weight: 700; color: ${isCorrect ? '#10b981' : '#ef4444'}">${escapeHtml(userChosen)}</span></div>
+                            ${!isCorrect ? `<div style="color: #64748b;">Correct: <span style="font-weight: 700; color: #10b981">${escapeHtml(correctChoices)}</span></div>` : ''}
+                        </div>
+                    `;
+                } else {
+                    let correctChoiceStr = q.options[q.correct_answer] || 'Unknown';
+                    let userChosenStr = userChoice !== null && userChoice !== undefined && userChoice !== '' ? q.options[userChoice] : 'None';
+                    answerDisplay = `
+                        <div style="margin-top: 0.5rem; font-size: 0.875rem;">
+                            <div style="color: #64748b; margin-bottom: 0.25rem;">Selected: <span style="font-weight: 700; color: ${isCorrect ? '#10b981' : '#ef4444'}">${escapeHtml(userChosenStr)}</span></div>
+                            ${!isCorrect ? `<div style="color: #64748b;">Correct: <span style="font-weight: 700; color: #10b981">${escapeHtml(correctChoiceStr)}</span></div>` : ''}
+                        </div>
+                    `;
+                }
+                
+                html += `
+                    <div style="border: 1px solid #e2e8f0; border-radius: 1rem; padding: 1.5rem; margin-bottom: 1rem; background: ${isCorrect ? 'rgba(16, 185, 129, 0.05)' : 'rgba(239, 68, 68, 0.05)'};">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                            <h4 style="font-weight: 700; margin-bottom: 0.5rem; flex: 1; padding-right: 1rem;">Q${idx + 1}: ${escapeHtml(q.question_text)}</h4>
+                            <span style="font-weight: 900; color: ${isCorrect ? '#10b981' : '#ef4444'}">${isCorrect ? '✓ Correct' : '✗ Incorrect'}</span>
+                        </div>
+                        <div style="font-size: 0.75rem; color: #64748b; margin-bottom: 1rem;">Marks: ${isCorrect ? q.marks : 0} / ${q.marks}</div>
+                        ${answerDisplay}
+                    </div>
+                `;
+            });
+            
+            document.getElementById('answers-container').innerHTML = html;
+            document.getElementById('answers-modal').classList.add('show');
         }
         
         document.querySelectorAll('.modal-overlay').forEach(modal => {
@@ -1075,5 +1256,6 @@ $user = getCurrentUser();
         loadTopics();
         loadContent();
     </script>
+    <?php include __DIR__ . '/../includes/support_popup.php'; ?>
 </body>
 </html>

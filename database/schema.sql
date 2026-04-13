@@ -1,9 +1,6 @@
 -- Syntalytix Database Schema (MySQL)
 -- Run this to set up your database
 
-CREATE DATABASE IF NOT EXISTS syntalytix_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE syntalytix_db;
-
 -- Roles table
 CREATE TABLE roles (
     id INT PRIMARY KEY AUTO_INCREMENT,
@@ -24,7 +21,7 @@ CREATE TABLE users (
     email VARCHAR(255) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL,
     role_id INT DEFAULT 3,
-    status ENUM('Active', 'Disabled') DEFAULT 'Active',
+    status ENUM('Active', 'Pending', 'Disabled') DEFAULT 'Active',
     reset_token VARCHAR(255) NULL,
     reset_token_expires TIMESTAMP NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

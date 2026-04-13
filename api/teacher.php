@@ -47,6 +47,9 @@ switch ($action) {
     case 'get_topics':
         getTopics($conn);
         break;
+    case 'get_test_questions':
+        getTestQuestions($conn, $user['id']);
+        break;
     default:
         echo json_encode(['success' => false, 'error' => 'Invalid action']);
 }
@@ -161,6 +164,7 @@ function updateTest($conn, $userId) {
     $id = $_POST['id'] ?? 0;
     $test_name = $_POST['test_name'] ?? '';
     $topic = $_POST['topic'] ?? '';
+    $questions = json_decode($_POST['questions'] ?? '[]', true);
     
     // Verify ownership
     $stmt = $conn->prepare("SELECT creator_id FROM tests WHERE id = ?");
@@ -174,12 +178,72 @@ function updateTest($conn, $userId) {
         return;
     }
     
-    $stmt = $conn->prepare("UPDATE tests SET test_name = ?, topic = ? WHERE id = ?");
-    $stmt->bind_param("ssi", $test_name, $topic, $id);
-    $success = $stmt->execute();
+    $conn->begin_transaction();
+    
+    try {
+        // Update test details
+        $stmt = $conn->prepare("UPDATE tests SET test_name = ?, topic = ? WHERE id = ?");
+        $stmt->bind_param("ssi", $test_name, $topic, $id);
+        $stmt->execute();
+        $stmt->close();
+        
+        // Delete existing questions and re-insert
+        $stmt = $conn->prepare("DELETE FROM questions WHERE test_id = ?");
+        $stmt->bind_param("i", $id);
+        $stmt->execute();
+        $stmt->close();
+        
+        // Insert updated questions
+        $stmt = $conn->prepare("INSERT INTO questions (test_id, question_text, question_type, options, correct_answer, correct_answers, marks) VALUES (?, ?, ?, ?, ?, ?, ?)");
+        foreach ($questions as $q) {
+            $options = json_encode($q['options'] ?? []);
+            $correctAnswers = json_encode($q['correct_answers'] ?? []);
+            $stmt->bind_param("isssssi", $id, $q['question_text'], $q['question_type'], $options, $q['correct_answer'], $correctAnswers, $q['marks']);
+            $stmt->execute();
+        }
+        $stmt->close();
+        
+        $conn->commit();
+        echo json_encode(['success' => true]);
+    } catch (Exception $e) {
+        $conn->rollback();
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+}
+
+function getTestQuestions($conn, $userId) {
+    $testId = $_GET['test_id'] ?? 0;
+    
+    // Verify ownership
+    $stmt = $conn->prepare("SELECT creator_id FROM tests WHERE id = ?");
+    $stmt->bind_param("i", $testId);
+    $stmt->execute();
+    $result = $stmt->get_result()->fetch_assoc();
     $stmt->close();
     
-    echo json_encode(['success' => $success]);
+    if (!$result || $result['creator_id'] != $userId) {
+        echo json_encode(['success' => false, 'error' => 'Not authorized']);
+        return;
+    }
+    
+    // Get questions
+    $stmt = $conn->prepare("SELECT * FROM questions WHERE test_id = ? ORDER BY id");
+    $stmt->bind_param("i", $testId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $questions = [];
+    while ($row = $result->fetch_assoc()) {
+        $row['options'] = json_decode($row['options'], true);
+        $row['correct_answers'] = json_decode($row['correct_answers'], true);
+        // Handle single choice (correct_answer field)
+        if (empty($row['correct_answers']) && !empty($row['correct_answer'])) {
+            $row['correct_answers'] = [$row['correct_answer']];
+        }
+        $questions[] = $row;
+    }
+    $stmt->close();
+    
+    echo json_encode(['success' => true, 'questions' => $questions]);
 }
 
 function deleteContent($conn, $userId) {
@@ -288,6 +352,19 @@ function getTestScores($conn, $userId) {
     $qCount = $stmt->get_result()->fetch_assoc()['q_count'];
     $stmt->close();
     
+    // Get questions
+    $stmt = $conn->prepare("SELECT * FROM questions WHERE test_id = ? ORDER BY id");
+    $stmt->bind_param("i", $testId);
+    $stmt->execute();
+    $resQ = $stmt->get_result();
+    $questions = [];
+    while ($rowQ = $resQ->fetch_assoc()) {
+        $rowQ['options'] = json_decode($rowQ['options'], true);
+        $rowQ['correct_answers'] = json_decode($rowQ['correct_answers'], true);
+        $questions[] = $rowQ;
+    }
+    $stmt->close();
+    
     echo json_encode([
         'success' => true,
         'test_info' => $testInfo,
@@ -298,7 +375,8 @@ function getTestScores($conn, $userId) {
             'max_score' => $maxScore,
             'total_marks' => $totalMarks,
             'total_questions' => $qCount
-        ]
+        ],
+        'questions' => $questions
     ]);
 }
 ?>

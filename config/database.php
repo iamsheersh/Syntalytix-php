@@ -2,7 +2,7 @@
 // config/database.php
 // Database configuration for local XAMPP
 
-// Local XAMPP environment
+// Global XAMPP environment
 define('DB_HOST', 'localhost');
 define('DB_PORT', 3309);
 define('DB_USER', 'root');
